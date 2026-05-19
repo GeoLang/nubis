@@ -1,0 +1,11 @@
+[package]
+name = "nubis-core"
+description = "Point cloud processing — classification, filtering, thinning, spatial indexing"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+thiserror = "2"

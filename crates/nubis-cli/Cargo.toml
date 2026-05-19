@@ -1,0 +1,16 @@
+[package]
+name = "nubis-cli"
+description = "CLI for the Nubis point cloud processing engine"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "nubis"
+path = "src/main.rs"
+
+[dependencies]
+nubis-core.workspace = true
+clap = { version = "4", features = ["derive"] }
