@@ -39,10 +39,9 @@ pub fn ground_filter_simple(cloud: &mut PointCloud, cell_size: f64, threshold: f
 pub fn thin_random(cloud: &PointCloud, fraction: f64) -> PointCloud {
     // Use a simple deterministic hash-based approach for reproducibility
     let keep = (cloud.len() as f64 * fraction.clamp(0.0, 1.0)) as usize;
-    let step = if keep == 0 {
-        return PointCloud::new();
-    } else {
-        cloud.len() / keep
+    let step = match cloud.len().checked_div(keep) {
+        Some(s) => s,
+        None => return PointCloud::new(),
     };
 
     let points: Vec<Point3> = cloud
