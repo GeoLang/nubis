@@ -17,6 +17,6 @@ pub use cloud::{Point3, PointCloud};
 pub use error::Error;
 pub use filter::{ground_filter_simple, thin_random, thin_voxel};
 pub use interpolation::{InterpolatedGrid, idw_interpolation, statistical_outlier_removal};
-pub use io::{CloudStats, LasHeader};
+pub use io::{CloudStats, LasHeader, read_las, write_las};
 pub use normals::estimate_normals;
 pub use octree::Octree;
