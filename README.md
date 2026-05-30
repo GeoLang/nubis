@@ -1,8 +1,8 @@
 # Nubis
 
-Point cloud processing engine for the TileTopia-HQ GIS stack.
+Point cloud processing engine for the GeoLang GIS stack.
 
-[Documentation](https://tiletopia-hq.github.io/nubis/) · [GitHub](https://github.com/TileTopia-HQ/nubis)
+[Documentation](https://geolang.github.io/nubis/) · [GitHub](https://github.com/GeoLang/nubis)
 
 ## Features
 
