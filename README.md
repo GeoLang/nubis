@@ -1,5 +1,8 @@
 # Nubis
 
+[![CI](https://github.com/GeoLang/nubis/actions/workflows/ci.yml/badge.svg)](https://github.com/GeoLang/nubis/actions)
+[![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](LICENSE)
+
 Point cloud processing engine for the GeoLang GIS stack.
 
 [Documentation](https://geolang.github.io/nubis/) · [GitHub](https://github.com/GeoLang/nubis)
