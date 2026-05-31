@@ -228,9 +228,9 @@ pub fn ordinary_kriging(
 
 /// Moran's I spatial autocorrelation statistic.
 ///
-/// Returns (I, E[I], z-score) where:
-/// - I > E[I] indicates positive spatial autocorrelation (clustering)
-/// - I < E[I] indicates negative spatial autocorrelation (dispersion)
+/// Returns (I, E\[I\], z-score) where:
+/// - I > E\[I\] indicates positive spatial autocorrelation (clustering)
+/// - I < E\[I\] indicates negative spatial autocorrelation (dispersion)
 /// - |z-score| > 1.96 is statistically significant at 95% confidence
 pub fn morans_i(cloud: &PointCloud, bandwidth: f64) -> (f64, f64, f64) {
     let points = cloud.points();
