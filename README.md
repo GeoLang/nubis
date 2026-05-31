@@ -15,6 +15,7 @@ Point cloud processing engine for the GeoLang GIS stack.
 - **Normal estimation** — Per-point surface normals from local neighborhoods
 - **Statistical Outlier Removal (SOR)** — Remove noise points based on mean distance to neighbors
 - **Spatial indexing** — Octree with radius queries, configurable leaf size, depth-limited subdivision
+- **Geostatistics** — Empirical variograms (spherical, exponential, gaussian, linear, power models), Ordinary Kriging interpolation, Moran's I spatial autocorrelation, Getis-Ord Gi* hot-spot analysis
 
 ## Usage
 
