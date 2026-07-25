@@ -60,4 +60,6 @@ nubis thin --input scan.las --method voxel --size 0.5 --output thinned.las
 
 ## License
 
-AGPL-3.0-or-later
+AGPL-3.0-or-later, see [LICENSE](LICENSE).
+
+Copyright (C) 2026 Grok Image Compression Inc.
