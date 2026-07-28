@@ -9,7 +9,7 @@ Point cloud processing engine for the GeoLang GIS stack.
 
 ## Features
 
-- **LAS I/O** — Read and write LAS point cloud files with header parsing
+- **LAS I/O** — Read and write LAS point formats 0-3 from any reader or writer, with header parsing
 - **Point cloud types** — `Point3`, `PointCloud` with classification, intensity, and statistics
 - **Classification** — ASPRS LAS standard codes (ground, vegetation, building, water, etc.)
 - **Ground filtering** — Grid-based progressive morphological filter with configurable cell size and threshold
@@ -30,14 +30,15 @@ use nubis_core::{
 };
 
 // Read a LAS file
-let cloud = read_las("scan.las").unwrap();
+let mut file = std::fs::File::open("scan.las").unwrap();
+let cloud = read_las(&mut file).unwrap();
 
 // Ground filtering
 let mut cloud = PointCloud::from_points(points);
 ground_filter_simple(&mut cloud, 2.0, 0.5);
 
-// IDW interpolation to grid
-let grid = idw_interpolation(&cloud, 1.0, 2.0, 12);
+// IDW interpolation to grid: cell size, power, search radius, min points
+let grid = idw_interpolation(&cloud, 1.0, 2.0, 10.0, 3).unwrap();
 
 // Normal estimation
 let normals = estimate_normals(&cloud, 10);
@@ -52,10 +53,12 @@ let nearby = tree.query_radius(cloud.points(), &query, 5.0);
 
 ## CLI
 
+The CLI is a demo harness over a synthetic cloud, it does not read or write LAS files yet.
+Use `nubis-core` directly for real work.
+
 ```sh
-nubis info scan.las
-nubis ground --input scan.las --cell-size 2.0 --threshold 0.5 --output ground.las
-nubis thin --input scan.las --method voxel --size 0.5 --output thinned.las
+nubis info --count 1000
+nubis ground --cell-size 2.0 --threshold 0.5
 ```
 
 ## License
