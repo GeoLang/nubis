@@ -432,6 +432,10 @@ fn load_cloud(path: &Path) -> Result<PointCloud> {
 }
 
 fn save_cloud(cloud: &PointCloud, path: &Path) -> Result<()> {
+    // checked before create so a failed run cannot leave an empty file behind
+    if cloud.is_empty() {
+        return Err(context(path, "nothing left to write, the result is empty").into());
+    }
     let mut writer = create(path)?;
     write_las(cloud, &mut writer).map_err(|e| context(path, e))?;
     writer.flush().map_err(|e| context(path, e))?;

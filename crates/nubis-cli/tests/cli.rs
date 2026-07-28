@@ -423,6 +423,27 @@ fn variogram_prints_bins_and_fitted_model() {
 }
 
 #[test]
+fn empty_result_fails_without_writing_a_file() {
+    let dir = tempdir().unwrap();
+    let input = fixture(&dir, "terrain.las", &terrain());
+    let output = dir.path().join("thin.las");
+
+    let err = run_err(&[
+        "thin",
+        "--input",
+        s(&input),
+        "--output",
+        s(&output),
+        "--method",
+        "random",
+        "--fraction",
+        "0.0",
+    ]);
+    assert!(err.contains("empty"), "{err}");
+    assert!(!output.exists(), "no file should be left behind");
+}
+
+#[test]
 fn demo_writes_a_readable_las_file() {
     let dir = tempdir().unwrap();
     let output = dir.path().join("demo.las");
