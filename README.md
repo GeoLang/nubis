@@ -53,13 +53,36 @@ let nearby = tree.query_radius(cloud.points(), &query, 5.0);
 
 ## CLI
 
-The CLI is a demo harness over a synthetic cloud, it does not read or write LAS files yet.
-Use `nubis-core` directly for real work.
+`nubis` reads LAS point formats 0-3 and writes LAS 1.2 format 0. Gridded output is an
+Esri ASCII grid (`.asc`) with values on the grid nodes (`xllcenter`/`yllcenter`).
 
 ```sh
-nubis info --count 1000
-nubis ground --cell-size 2.0 --threshold 0.5
+# summary: header, bounds, z statistics, classification counts
+nubis info --input scan.las
+
+# ground classification
+nubis ground-classify --input scan.las --output ground.las --cell-size 2.0 --threshold 0.5
+
+# decimation, voxel (default) or random
+nubis thin --input scan.las --output thin.las --voxel-size 1.0
+nubis thin --input scan.las --output thin.las --method random --fraction 0.25
+
+# statistical outlier removal
+nubis outlier-removal --input scan.las --output clean.las --neighbours 20 --std-multiplier 2.0
+
+# gridding, idw (default) or ordinary kriging with a fitted spherical variogram
+nubis interpolate-to-grid --input ground.las --output dem.asc --cell-size 1.0 --search-radius 10.0
+nubis interpolate-to-grid --input ground.las --output dem.asc --method kriging --search-radius 10.0
+
+# empirical variogram and fitted spherical model
+nubis variogram --input scan.las --bins 10
+
+# synthetic terrain to try the commands on
+nubis demo --output demo.las --count 1000
 ```
+
+Kriging needs `--search-radius` above 0, it also sets the maximum lag used to fit the variogram.
+Every command prints a short summary and exits non-zero with a message on stderr on failure.
 
 ## License
 
