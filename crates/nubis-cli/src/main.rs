@@ -61,6 +61,19 @@ enum Commands {
         #[arg(long, default_value_t = 0.5)]
         fraction: f64,
     },
+    /// Keep only points with the given classifications and write a new LAS file
+    FilterClass {
+        /// Input LAS file
+        #[arg(long)]
+        input: PathBuf,
+        /// Output LAS file
+        #[arg(long)]
+        output: PathBuf,
+        /// Classification to keep: a name like `ground`, or a bare code 0-31
+        /// for classes without a name. Repeat the flag to keep several.
+        #[arg(long = "keep", value_parser = parse_keep, required = true)]
+        keep: Vec<Classification>,
+    },
     /// Remove statistical outliers and write a new LAS file
     OutlierRemoval {
         /// Input LAS file
@@ -135,6 +148,61 @@ enum ThinMethod {
     Random,
 }
 
+/// The ASPRS classes nubis-core can name. Codes outside this set are carried
+/// as `Other` and selected by their bare number in `parse_keep`.
+#[derive(Clone, Copy, ValueEnum)]
+enum ClassName {
+    Unclassified,
+    Unknown,
+    Ground,
+    LowVegetation,
+    MediumVegetation,
+    HighVegetation,
+    Building,
+    LowPoint,
+    Water,
+    Rail,
+    Road,
+    BridgeDeck,
+    HighNoise,
+}
+
+impl From<ClassName> for Classification {
+    fn from(name: ClassName) -> Self {
+        match name {
+            ClassName::Unclassified => Classification::Unclassified,
+            ClassName::Unknown => Classification::Unknown,
+            ClassName::Ground => Classification::Ground,
+            ClassName::LowVegetation => Classification::LowVegetation,
+            ClassName::MediumVegetation => Classification::MediumVegetation,
+            ClassName::HighVegetation => Classification::HighVegetation,
+            ClassName::Building => Classification::Building,
+            ClassName::LowPoint => Classification::LowPoint,
+            ClassName::Water => Classification::Water,
+            ClassName::Rail => Classification::Rail,
+            ClassName::Road => Classification::Road,
+            ClassName::BridgeDeck => Classification::BridgeDeck,
+            ClassName::HighNoise => Classification::HighNoise,
+        }
+    }
+}
+
+/// a class name, or a bare code 0-31 for classes without a name
+fn parse_keep(s: &str) -> std::result::Result<Classification, String> {
+    if let Ok(code) = s.parse::<u8>() {
+        return if code <= 31 {
+            Ok(Classification::from_u8(code))
+        } else {
+            Err(format!(
+                "class code {code} is out of range, LAS classes are 0-31"
+            ))
+        };
+    }
+    <ClassName as ValueEnum>::from_str(s, true)
+        .map(Classification::from)
+        .map_err(|_| format!("unknown class `{s}`, use a name like `ground` or a code 0-31"))
+}
+
 #[derive(Clone, Copy, ValueEnum)]
 enum GridMethod {
     Idw,
@@ -164,6 +232,11 @@ fn run() -> Result<()> {
             voxel_size,
             fraction,
         } => thin(&input, &output, method, voxel_size, fraction),
+        Commands::FilterClass {
+            input,
+            output,
+            keep,
+        } => filter_class(&input, &output, &keep),
         Commands::OutlierRemoval {
             input,
             output,
@@ -206,7 +279,7 @@ fn info(input: &Path) -> Result<()> {
 
     let mut counts: BTreeMap<u8, usize> = BTreeMap::new();
     for p in cloud.points() {
-        *counts.entry(p.classification as u8).or_default() += 1;
+        *counts.entry(p.classification.to_u8()).or_default() += 1;
     }
     println!("Classifications:");
     for (code, count) in counts {
@@ -258,6 +331,28 @@ fn thin(
         cloud.len(),
         thinned.len(),
         percent(thinned.len(), cloud.len())
+    );
+    println!("Wrote {}", output.display());
+    Ok(())
+}
+
+fn filter_class(input: &Path, output: &Path, keep: &[Classification]) -> Result<()> {
+    let cloud = load_cloud(input)?;
+
+    let kept: Vec<Point3> = cloud
+        .points()
+        .iter()
+        .filter(|p| keep.contains(&p.classification))
+        .copied()
+        .collect();
+    let filtered = PointCloud::from_points(kept);
+    let count = filtered.len();
+    save_cloud(&filtered, output)?;
+
+    println!(
+        "Kept {count}/{} points ({:.1}%)",
+        cloud.len(),
+        percent(count, cloud.len())
     );
     println!("Wrote {}", output.display());
     Ok(())

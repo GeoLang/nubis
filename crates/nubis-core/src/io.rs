@@ -1,6 +1,9 @@
 use crate::{Classification, Error};
 use std::io::{Read, Seek, SeekFrom};
 
+/// Size of the LAS 1.2 public header block.
+const HEADER_LEN: usize = 227;
+
 /// LAS file header (version 1.2+).
 #[derive(Debug, Clone)]
 pub struct LasHeader {
@@ -27,7 +30,7 @@ pub struct LasHeader {
 impl LasHeader {
     /// Read a LAS header from a byte stream.
     pub fn read<R: Read>(reader: &mut R) -> Result<Self, Error> {
-        let mut buf = [0u8; 227];
+        let mut buf = [0u8; HEADER_LEN];
         reader.read_exact(&mut buf).map_err(Error::Io)?;
 
         // Validate file signature "LASF"
@@ -118,8 +121,9 @@ pub fn read_las<R: Read + Seek>(reader: &mut R) -> Result<crate::PointCloud, Err
         let raw_z = i32::from_le_bytes(record_buf[8..12].try_into().unwrap());
         let intensity = u16::from_le_bytes(record_buf[12..14].try_into().unwrap());
 
-        // Byte 15: return number/flags, byte 16: classification
-        let classification = Classification::from_u8(record_buf[15]);
+        // Byte 15 packs the class in bits 0-4 and the synthetic/key-point/withheld
+        // flags in bits 5-7, so mask before decoding or a flagged point reads as garbage.
+        let classification = Classification::from_u8(record_buf[15] & 0x1f);
 
         let x = raw_x as f64 * header.scale_x + header.offset_x;
         let y = raw_y as f64 * header.scale_y + header.offset_y;
@@ -152,13 +156,28 @@ pub fn write_las<W: std::io::Write>(
     let offset_y = (min.y + max.y) / 2.0;
     let offset_z = (min.z + max.z) / 2.0;
 
+    // Coordinates are stored as i32 counts of `scale`, measured from the midpoint,
+    // so an extent past twice i32::MAX * scale cannot be represented at all.
+    let max_extent = i32::MAX as f64 * scale * 2.0;
+    for (axis, span) in [
+        ("x", max.x - min.x),
+        ("y", max.y - min.y),
+        ("z", max.z - min.z),
+    ] {
+        if !span.is_finite() || span > max_extent {
+            return Err(Error::InvalidParameter(format!(
+                "{axis} extent {span} exceeds the {max_extent} the LAS scale {scale} can represent"
+            )));
+        }
+    }
+
     let point_format: u8 = 0;
     let point_record_length: u16 = 20;
-    let offset_to_points: u32 = 227;
+    let offset_to_points: u32 = HEADER_LEN as u32;
     let num_points = cloud.len() as u32;
 
-    // Write header (227 bytes)
-    let mut header = vec![0u8; 227];
+    // Write header
+    let mut header = vec![0u8; HEADER_LEN];
 
     // Signature
     header[0..4].copy_from_slice(b"LASF");
@@ -169,6 +188,8 @@ pub fn write_las<W: std::io::Write>(
     header[26..32].copy_from_slice(b"Nubis\0");
     // Generating software (32 bytes at offset 58)
     header[58..64].copy_from_slice(b"Nubis\0");
+    // Header size, other readers reject the file when this is left at 0
+    header[94..96].copy_from_slice(&(HEADER_LEN as u16).to_le_bytes());
     // Offset to point data
     header[96..100].copy_from_slice(&offset_to_points.to_le_bytes());
     // Point data format
@@ -208,8 +229,9 @@ pub fn write_las<W: std::io::Write>(
         writer.write_all(&pt.intensity.to_le_bytes())?;
         // Return number + number of returns (byte 14)
         writer.write_all(&[0x11])?; // 1 return, return #1
-        // Classification (byte 15)
-        writer.write_all(&[pt.classification as u8])?;
+        // Classification (byte 15), masked to the 5 bits the field allows so a
+        // hand-built out-of-range code cannot spill into the flag bits
+        writer.write_all(&[pt.classification.to_u8() & 0x1f])?;
         // Scan angle rank, user data, point source id (4 bytes padding)
         writer.write_all(&[0u8; 4])?;
     }

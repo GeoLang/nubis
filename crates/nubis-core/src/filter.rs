@@ -35,21 +35,23 @@ pub fn ground_filter_simple(cloud: &mut PointCloud, cell_size: f64, threshold: f
     }
 }
 
-/// Random thinning: keep approximately `fraction` of points.
+/// Thinning: keep `fraction` of the points, spread evenly through the cloud.
+///
+/// Deterministic, so the same input always yields the same output.
 pub fn thin_random(cloud: &PointCloud, fraction: f64) -> PointCloud {
-    // Use a simple deterministic hash-based approach for reproducibility
-    let keep = (cloud.len() as f64 * fraction.clamp(0.0, 1.0)) as usize;
-    let step = match cloud.len().checked_div(keep) {
-        Some(s) => s,
-        None => return PointCloud::new(),
-    };
+    let n = cloud.len();
+    let keep = (n as f64 * fraction.clamp(0.0, 1.0)).round() as usize;
 
-    let points: Vec<Point3> = cloud
-        .points()
-        .iter()
-        .step_by(step.max(1))
-        .copied()
-        .collect();
+    if keep == 0 {
+        return PointCloud::new();
+    }
+    if keep >= n {
+        return cloud.clone();
+    }
+
+    // an integer stride can only express 1/1, 1/2, 1/3..., which rounds every
+    // fraction above a half up to "keep everything", so pick indices instead
+    let points: Vec<Point3> = (0..keep).map(|i| cloud.points()[i * n / keep]).collect();
     PointCloud::from_points(points)
 }
 
@@ -69,7 +71,11 @@ pub fn thin_voxel(cloud: &PointCloud, voxel_size: f64) -> PointCloud {
         voxels.entry((vx, vy, vz)).or_insert(*p);
     }
 
-    PointCloud::from_points(voxels.into_values().collect())
+    // hash order varies between runs, so sort by voxel to keep the output stable
+    let mut kept: Vec<((i64, i64, i64), Point3)> = voxels.into_iter().collect();
+    kept.sort_unstable_by_key(|(voxel, _)| *voxel);
+
+    PointCloud::from_points(kept.into_iter().map(|(_, p)| p).collect())
 }
 
 #[cfg(test)]

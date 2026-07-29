@@ -18,7 +18,7 @@ Point cloud processing engine for the GeoLang GIS stack.
 - **Normal estimation** — Per-point surface normals from local neighborhoods
 - **Statistical Outlier Removal (SOR)** — Remove noise points based on mean distance to neighbors
 - **Spatial indexing** — Octree with radius queries, configurable leaf size, depth-limited subdivision
-- **Geostatistics** — Empirical variograms (spherical, exponential, gaussian, linear, power models), Ordinary Kriging interpolation, Moran's I spatial autocorrelation, Getis-Ord Gi* hot-spot analysis
+- **Geostatistics** — Empirical variograms (spherical, exponential, gaussian models), Ordinary Kriging interpolation, Moran's I spatial autocorrelation, Getis-Ord Gi* hot-spot analysis
 
 ## Usage
 
@@ -67,6 +67,10 @@ nubis ground-classify --input scan.las --output ground.las --cell-size 2.0 --thr
 nubis thin --input scan.las --output thin.las --voxel-size 1.0
 nubis thin --input scan.las --output thin.las --method random --fraction 0.25
 
+# keep only chosen classes, repeat --keep for several
+nubis filter-class --input scan.las --output ground.las --keep ground
+nubis filter-class --input scan.las --output surfaces.las --keep ground --keep building
+
 # statistical outlier removal
 nubis outlier-removal --input scan.las --output clean.las --neighbours 20 --std-multiplier 2.0
 
@@ -83,6 +87,22 @@ nubis demo --output demo.las --count 1000
 
 Kriging needs `--search-radius` above 0, it also sets the maximum lag used to fit the variogram.
 Every command prints a short summary and exits non-zero with a message on stderr on failure.
+
+A bare-earth DEM is three steps, classify then select then grid:
+
+```sh
+nubis outlier-removal --input scan.las --output clean.las
+nubis ground-classify --input clean.las --output classified.las --cell-size 3.0 --threshold 0.5
+nubis filter-class --input classified.las --output bare.las --keep ground
+nubis interpolate-to-grid --input bare.las --output dem.asc --cell-size 2.0 --search-radius 4.0
+```
+
+Limits worth knowing:
+
+- `--keep` only names the classes `Classification` has variants for. Other codes round trip
+  through read and write untouched, but cannot be selected by name.
+- Writing uses a 1 mm scale, so a cloud spanning more than about 4295 km on any axis is
+  rejected rather than written with saturated coordinates.
 
 ## License
 

@@ -18,7 +18,7 @@ pub use cloud::{Point3, PointCloud};
 pub use error::Error;
 pub use filter::{ground_filter_simple, thin_random, thin_voxel};
 pub use geostatistics::{
-    Variogram, VariogramBin, VariogramModel, empirical_variogram, getis_ord_gi_star, morans_i,
+    VariogramBin, VariogramModel, empirical_variogram, getis_ord_gi_star, morans_i,
     ordinary_kriging,
 };
 pub use interpolation::{InterpolatedGrid, idw_interpolation, statistical_outlier_removal};

@@ -1,5 +1,8 @@
 use crate::{Point3, PointCloud};
 
+/// Squared distance under which a point counts as sitting on a grid node.
+const EXACT_DIST_SQ: f64 = 1e-20;
+
 /// Result of IDW interpolation: a regular grid of elevation values.
 #[derive(Debug, Clone)]
 pub struct InterpolatedGrid {
@@ -55,7 +58,8 @@ pub fn idw_interpolation(
             let mut weight_sum = 0.0;
             let mut value_sum = 0.0;
             let mut count = 0;
-            let mut exact_match = None;
+            let mut exact_sum = 0.0;
+            let mut exact_count = 0usize;
 
             for p in points {
                 let dx = px - p.x;
@@ -66,10 +70,11 @@ pub fn idw_interpolation(
                     continue;
                 }
 
-                if dist_sq < 1e-20 {
-                    // Point exactly at grid node
-                    exact_match = Some(p.z);
-                    break;
+                if dist_sq < EXACT_DIST_SQ {
+                    // sits on the grid node, so its weight would be infinite
+                    exact_sum += p.z;
+                    exact_count += 1;
+                    continue;
                 }
 
                 let dist = dist_sq.sqrt();
@@ -79,8 +84,10 @@ pub fn idw_interpolation(
                 count += 1;
             }
 
-            if let Some(z) = exact_match {
-                data[row * width + col] = z;
+            // several returns can share an xy, so average them rather than letting
+            // whichever the cloud lists first decide the cell
+            if exact_count > 0 {
+                data[row * width + col] = exact_sum / exact_count as f64;
             } else if count >= min_points && weight_sum > 0.0 {
                 data[row * width + col] = value_sum / weight_sum;
             }

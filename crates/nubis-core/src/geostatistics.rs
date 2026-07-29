@@ -28,13 +28,6 @@ pub enum VariogramModel {
     Gaussian { nugget: f64, sill: f64, range: f64 },
 }
 
-/// Fitted variogram with model and empirical data.
-#[derive(Debug, Clone)]
-pub struct Variogram {
-    pub model: VariogramModel,
-    pub bins: Vec<VariogramBin>,
-}
-
 /// Compute the empirical variogram from a point cloud.
 pub fn empirical_variogram(cloud: &PointCloud, n_bins: usize, max_lag: f64) -> Vec<VariogramBin> {
     let points = cloud.points();
@@ -101,7 +94,12 @@ impl VariogramModel {
         }
     }
 
-    /// Fit a spherical model to empirical variogram bins using least squares.
+    /// Fit a spherical model to empirical variogram bins.
+    ///
+    /// Estimates the parameters directly from the bin extremes rather than by
+    /// least squares: nugget is half the smallest semivariance, sill is the
+    /// largest minus the nugget, and range is the first lag reaching 95% of it.
+    /// Noisy short lags can therefore pull the range far too low.
     pub fn fit_spherical(bins: &[VariogramBin]) -> Self {
         if bins.is_empty() {
             return VariogramModel::Spherical {

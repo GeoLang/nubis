@@ -143,10 +143,13 @@ fn test_classification_from_u8_known() {
 }
 
 #[test]
-fn test_classification_from_u8_unknown() {
-    assert_eq!(Classification::from_u8(255), Classification::Unknown);
-    assert_eq!(Classification::from_u8(100), Classification::Unknown);
-    assert_eq!(Classification::from_u8(8), Classification::Unknown);
+fn test_classification_from_u8_unnamed() {
+    // codes with no name keep their value instead of folding to Unknown
+    assert_eq!(Classification::from_u8(255), Classification::Other(255));
+    assert_eq!(Classification::from_u8(100), Classification::Other(100));
+    assert_eq!(Classification::from_u8(8), Classification::Other(8));
+    // code 1 is the one that really is "unknown"
+    assert_eq!(Classification::from_u8(1), Classification::Unknown);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

@@ -76,6 +76,27 @@ fn plane() -> PointCloud {
     PointCloud::from_points(points)
 }
 
+/// Flat ground on a 1 unit grid with a raised block of building points over
+/// part of it, so selecting a class visibly changes the interpolated surface.
+fn ground_with_building() -> PointCloud {
+    let mut points = Vec::new();
+    for y in 0..16 {
+        for x in 0..16 {
+            points.push(
+                Point3::new(x as f64, y as f64, 10.0).with_classification(Classification::Ground),
+            );
+        }
+    }
+    for y in 8..14 {
+        for x in 8..14 {
+            points.push(
+                Point3::new(x as f64, y as f64, 25.0).with_classification(Classification::Building),
+            );
+        }
+    }
+    PointCloud::from_points(points)
+}
+
 /// Dense cluster plus one point far outside it.
 fn cluster_with_outlier() -> PointCloud {
     let mut points = Vec::new();
@@ -535,6 +556,340 @@ fn non_las_input_fails() {
 
     let err = run_err(&["info", "--input", s(&path)]);
     assert!(err.contains("LASF"), "{err}");
+}
+
+#[test]
+fn filter_class_keeps_only_the_requested_class() {
+    let dir = tempdir().unwrap();
+    let input = fixture(&dir, "mixed.las", &ground_with_building());
+    let output = dir.path().join("ground.las");
+
+    let out = run_ok(&[
+        "filter-class",
+        "--input",
+        s(&input),
+        "--output",
+        s(&output),
+        "--keep",
+        "ground",
+    ]);
+    assert!(out.contains("Kept 256/292"), "{out}");
+
+    let cloud = load(&output);
+    assert_eq!(cloud.len(), 256);
+    assert!(
+        cloud
+            .points()
+            .iter()
+            .all(|p| p.classification == Classification::Ground),
+        "a non-ground point survived"
+    );
+    let (_, max) = cloud.bounds().unwrap();
+    assert!((max.z - 10.0).abs() < 1e-3, "building points were kept");
+}
+
+#[test]
+fn filter_class_accepts_several_classes() {
+    let dir = tempdir().unwrap();
+    let input = fixture(&dir, "mixed.las", &ground_with_building());
+    let output = dir.path().join("both.las");
+
+    run_ok(&[
+        "filter-class",
+        "--input",
+        s(&input),
+        "--output",
+        s(&output),
+        "--keep",
+        "ground",
+        "--keep",
+        "building",
+    ]);
+    assert_eq!(load(&output).len(), 292, "both classes should survive");
+}
+
+#[test]
+fn filter_class_without_a_match_fails_without_writing() {
+    let dir = tempdir().unwrap();
+    let input = fixture(&dir, "mixed.las", &ground_with_building());
+    let output = dir.path().join("water.las");
+
+    let err = run_err(&[
+        "filter-class",
+        "--input",
+        s(&input),
+        "--output",
+        s(&output),
+        "--keep",
+        "water",
+    ]);
+    assert!(err.contains("empty"), "{err}");
+    assert!(!output.exists(), "no file should be left behind");
+}
+
+#[test]
+fn filter_class_selects_unnamed_codes_by_number() {
+    let dir = tempdir().unwrap();
+    let mut points: Vec<Point3> = (0..10)
+        .map(|i| Point3::new(i as f64, 0.0, 1.0).with_classification(Classification::Ground))
+        .collect();
+    points.extend(
+        (0..4).map(|i| {
+            Point3::new(i as f64, 5.0, 2.0).with_classification(Classification::Other(12))
+        }),
+    );
+    let input = fixture(&dir, "wires.las", &PointCloud::from_points(points));
+    let output = dir.path().join("code12.las");
+
+    let out = run_ok(&[
+        "filter-class",
+        "--input",
+        s(&input),
+        "--output",
+        s(&output),
+        "--keep",
+        "12",
+    ]);
+    assert!(out.contains("Kept 4/14"), "{out}");
+
+    let cloud = load(&output);
+    assert_eq!(cloud.len(), 4);
+    assert!(
+        cloud
+            .points()
+            .iter()
+            .all(|p| p.classification == Classification::Other(12)),
+        "a non-code-12 point survived"
+    );
+}
+
+#[test]
+fn filter_class_rejects_a_class_it_cannot_name() {
+    let dir = tempdir().unwrap();
+    let input = fixture(&dir, "mixed.las", &ground_with_building());
+    let output = dir.path().join("out.las");
+
+    let err = run_err(&[
+        "filter-class",
+        "--input",
+        s(&input),
+        "--output",
+        s(&output),
+        "--keep",
+        "powerline",
+    ]);
+    assert!(err.contains("powerline"), "{err}");
+}
+
+#[test]
+fn selecting_ground_before_gridding_removes_the_building_from_the_surface() {
+    let dir = tempdir().unwrap();
+    let input = fixture(&dir, "mixed.las", &ground_with_building());
+    let ground = dir.path().join("ground.las");
+    let with_building = dir.path().join("all.asc");
+    let ground_only = dir.path().join("ground.asc");
+
+    // 0.7 keeps the grid nodes off the 1 unit point lattice, so every cell is a
+    // real weighted estimate rather than an exact hit on one input point
+    let grid = |src: &Path, dst: &Path| {
+        run_ok(&[
+            "interpolate-to-grid",
+            "--input",
+            s(src),
+            "--output",
+            s(dst),
+            "--cell-size",
+            "0.7",
+            "--search-radius",
+            "2.0",
+            "--min-points",
+            "3",
+        ]);
+        parse_asc(dst)
+    };
+
+    let before = grid(&input, &with_building);
+    run_ok(&[
+        "filter-class",
+        "--input",
+        s(&input),
+        "--output",
+        s(&ground),
+        "--keep",
+        "ground",
+    ]);
+    let after = grid(&ground, &ground_only);
+
+    let peak = |asc: &Asc| {
+        asc.rows
+            .iter()
+            .flatten()
+            .copied()
+            .filter(|v| *v != asc.nodata)
+            .fold(f64::NEG_INFINITY, f64::max)
+    };
+
+    assert!(
+        peak(&before) > 12.0,
+        "the building should lift the mixed surface, peak was {}",
+        peak(&before)
+    );
+    assert!(
+        (peak(&after) - 10.0).abs() < 1e-3,
+        "the ground-only surface should be flat at 10, peak was {}",
+        peak(&after)
+    );
+    assert_eq!(before.ncols, after.ncols, "same extent either way");
+}
+
+#[test]
+fn a_grid_node_on_top_of_several_returns_averages_them() {
+    // regression: idw used to short circuit on the first point within 1e-10 of the
+    // node, so file order decided the cell. Every node here sits on a ground point
+    // at 10, and inside the footprint also on a building point at 25, so those
+    // cells must come out at the mean of the two rather than at either one.
+    let dir = tempdir().unwrap();
+    let input = fixture(&dir, "mixed.las", &ground_with_building());
+    let output = dir.path().join("dem.asc");
+
+    run_ok(&[
+        "interpolate-to-grid",
+        "--input",
+        s(&input),
+        "--output",
+        s(&output),
+        "--cell-size",
+        "1.0",
+        "--search-radius",
+        "3.0",
+    ]);
+
+    let asc = parse_asc(&output);
+    let values: Vec<f64> = asc
+        .rows
+        .iter()
+        .flatten()
+        .copied()
+        .filter(|v| *v != asc.nodata)
+        .collect();
+    let peak = values.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+    let floor = values.iter().copied().fold(f64::INFINITY, f64::min);
+
+    assert!(
+        (peak - 17.5).abs() < 1e-3,
+        "coincident 10 and 25 should average to 17.5, peak was {peak}"
+    );
+    assert!(
+        (floor - 10.0).abs() < 1e-3,
+        "ground-only nodes should stay at 10, floor was {floor}"
+    );
+    // 6x6 building block, so 36 nodes carry both returns
+    let averaged = values.iter().filter(|v| (**v - 17.5).abs() < 1e-3).count();
+    assert_eq!(averaged, 36, "wrong number of shared nodes");
+}
+
+#[test]
+fn thin_random_keeps_the_fraction_the_user_asked_for() {
+    // regression: fractions above a half used to keep the whole cloud
+    let dir = tempdir().unwrap();
+    let input = fixture(&dir, "terrain.las", &terrain());
+    let output = dir.path().join("thin.las");
+
+    for (fraction, expected) in [("0.25", 25), ("0.6", 60), ("0.9", 90)] {
+        run_ok(&[
+            "thin",
+            "--input",
+            s(&input),
+            "--output",
+            s(&output),
+            "--method",
+            "random",
+            "--fraction",
+            fraction,
+        ]);
+        assert_eq!(load(&output).len(), expected, "fraction {fraction} of 100");
+    }
+}
+
+#[test]
+fn truncated_point_data_fails() {
+    let dir = tempdir().unwrap();
+    let input = fixture(&dir, "terrain.las", &terrain());
+    let truncated = dir.path().join("cut.las");
+
+    // keep the header and its point count, drop most of the records
+    let mut bytes = std::fs::read(&input).unwrap();
+    bytes.truncate(227 + 20 * 5);
+    std::fs::write(&truncated, &bytes).unwrap();
+
+    let err = run_err(&["info", "--input", s(&truncated)]);
+    assert!(err.contains("cut.las"), "{err}");
+}
+
+#[test]
+fn unsupported_point_format_fails() {
+    let dir = tempdir().unwrap();
+    let input = fixture(&dir, "terrain.las", &terrain());
+    let bad = dir.path().join("fmt6.las");
+
+    let mut bytes = std::fs::read(&input).unwrap();
+    bytes[104] = 6;
+    std::fs::write(&bad, &bytes).unwrap();
+
+    let err = run_err(&["info", "--input", s(&bad)]);
+    assert!(err.contains("unsupported point format"), "{err}");
+}
+
+#[test]
+fn output_in_a_missing_directory_fails() {
+    let dir = tempdir().unwrap();
+    let input = fixture(&dir, "terrain.las", &terrain());
+    let output = dir.path().join("nowhere").join("thin.las");
+
+    let err = run_err(&[
+        "thin",
+        "--input",
+        s(&input),
+        "--output",
+        s(&output),
+        "--voxel-size",
+        "2.0",
+    ]);
+    assert!(err.contains("thin.las"), "{err}");
+}
+
+#[test]
+fn a_non_numeric_option_is_rejected_before_any_work() {
+    let dir = tempdir().unwrap();
+    let input = fixture(&dir, "terrain.las", &terrain());
+    let output = dir.path().join("thin.las");
+
+    let err = run_err(&[
+        "thin",
+        "--input",
+        s(&input),
+        "--output",
+        s(&output),
+        "--voxel-size",
+        "wide",
+    ]);
+    assert!(err.contains("wide"), "{err}");
+    assert!(!output.exists());
+}
+
+#[test]
+fn an_unknown_subcommand_is_rejected() {
+    let err = run_err(&["frobnicate"]);
+    assert!(err.contains("frobnicate"), "{err}");
+}
+
+#[test]
+fn variogram_rejects_a_zero_max_lag() {
+    let dir = tempdir().unwrap();
+    let input = fixture(&dir, "plane.las", &plane());
+
+    let err = run_err(&["variogram", "--input", s(&input), "--max-lag", "0"]);
+    assert!(err.contains("--max-lag"), "{err}");
 }
 
 #[test]
