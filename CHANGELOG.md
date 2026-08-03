@@ -6,6 +6,9 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- `idw_window` interpolates onto a caller-specified grid window (`GridWindow`) instead of
+  the cloud bounds, with points binned at the search radius so tiled gridding stays fast.
+
 - CLI works on real LAS files: `info`, `ground-classify`, `thin`, `filter-class`,
   `outlier-removal`, `interpolate-to-grid` (idw and kriging), `variogram`, `demo`.
   Grid output is an Esri ASCII grid.

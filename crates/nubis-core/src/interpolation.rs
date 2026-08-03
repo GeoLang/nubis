@@ -1,4 +1,5 @@
 use crate::{Point3, PointCloud};
+use std::collections::HashMap;
 
 /// Squared distance under which a point counts as sitting on a grid node.
 const EXACT_DIST_SQ: f64 = 1e-20;
@@ -94,6 +95,112 @@ pub fn idw_interpolation(
         }
     }
 
+    Some(InterpolatedGrid {
+        data,
+        width,
+        height,
+        cell_size,
+        origin_x,
+        origin_y,
+        nodata,
+    })
+}
+
+/// Grid geometry for [`idw_window`]: nodes sit at
+/// `(origin_x + col * cell_size, origin_y + row * cell_size)`, rows growing
+/// in +y, matching [`InterpolatedGrid`].
+#[derive(Debug, Clone, Copy)]
+pub struct GridWindow {
+    pub origin_x: f64,
+    pub origin_y: f64,
+    pub width: usize,
+    pub height: usize,
+    pub cell_size: f64,
+}
+
+/// IDW interpolation onto a caller-specified grid window.
+///
+/// Same weighting as [`idw_interpolation`], but the grid geometry comes from
+/// `window` rather than the cloud bounds, and cells no point reaches stay
+/// nodata. Points are binned at `search_radius` pitch so each node scans only
+/// its neighborhood, which is what makes tiled, windowed gridding practical.
+///
+/// Returns `None` when `window.cell_size` or `search_radius` is not positive
+/// (a positive radius is required, it is the bin pitch). An empty cloud
+/// yields an all-nodata grid.
+pub fn idw_window(
+    cloud: &PointCloud,
+    window: &GridWindow,
+    power: f64,
+    search_radius: f64,
+    min_points: usize,
+) -> Option<InterpolatedGrid> {
+    let GridWindow {
+        origin_x,
+        origin_y,
+        width,
+        height,
+        cell_size,
+    } = *window;
+    if cell_size <= 0.0 || search_radius <= 0.0 {
+        return None;
+    }
+    let nodata = -9999.0;
+    let mut data = vec![nodata; width * height];
+    let points = cloud.points();
+    let bin_key = |x: f64, y: f64| -> (i64, i64) {
+        (
+            ((x - origin_x) / search_radius).floor() as i64,
+            ((y - origin_y) / search_radius).floor() as i64,
+        )
+    };
+    let mut bins: HashMap<(i64, i64), Vec<usize>> = HashMap::new();
+    for (i, p) in points.iter().enumerate() {
+        bins.entry(bin_key(p.x, p.y)).or_default().push(i);
+    }
+    let radius_sq = search_radius * search_radius;
+    for row in 0..height {
+        let py = origin_y + row as f64 * cell_size;
+        for col in 0..width {
+            let px = origin_x + col as f64 * cell_size;
+            let (bx, by) = bin_key(px, py);
+            let mut weight_sum = 0.0;
+            let mut value_sum = 0.0;
+            let mut count = 0;
+            let mut exact_sum = 0.0;
+            let mut exact_count = 0usize;
+            for dy in -1..=1i64 {
+                for dx in -1..=1i64 {
+                    let Some(indices) = bins.get(&(bx + dx, by + dy)) else {
+                        continue;
+                    };
+                    for &i in indices {
+                        let p = &points[i];
+                        let ddx = px - p.x;
+                        let ddy = py - p.y;
+                        let dist_sq = ddx * ddx + ddy * ddy;
+                        if dist_sq > radius_sq {
+                            continue;
+                        }
+                        if dist_sq < EXACT_DIST_SQ {
+                            exact_sum += p.z;
+                            exact_count += 1;
+                            continue;
+                        }
+                        let w = 1.0 / dist_sq.sqrt().powf(power);
+                        weight_sum += w;
+                        value_sum += w * p.z;
+                        count += 1;
+                    }
+                }
+            }
+            if exact_count > 0 {
+                data[row * width + col] = exact_sum / exact_count as f64;
+            } else if count >= min_points && weight_sum > 0.0 {
+                data[row * width + col] = value_sum / weight_sum;
+            }
+        }
+    }
     Some(InterpolatedGrid {
         data,
         width,
@@ -221,6 +328,68 @@ mod tests {
         // The middle of a 100x100 grid at 10m resolution — might be nodata
         // depending on radius coverage
         assert!(far_cell == grid.nodata || far_cell > 0.0);
+    }
+
+    #[test]
+    fn test_idw_window_matches_full_interpolation() {
+        // Scattered points, same grid geometry both ways
+        let cloud = PointCloud::from_points(vec![
+            Point3::new(0.0, 0.0, 10.0),
+            Point3::new(9.0, 1.0, 20.0),
+            Point3::new(2.0, 8.0, 30.0),
+            Point3::new(10.0, 10.0, 40.0),
+            Point3::new(5.0, 5.0, 25.0),
+        ]);
+        let (cell, power, radius, min_pts) = (2.0, 2.0, 6.0, 1);
+        let full = idw_interpolation(&cloud, cell, power, radius, min_pts).unwrap();
+        let window = GridWindow {
+            origin_x: full.origin_x,
+            origin_y: full.origin_y,
+            width: full.width,
+            height: full.height,
+            cell_size: cell,
+        };
+        let windowed = idw_window(&cloud, &window, power, radius, min_pts).unwrap();
+        for (a, b) in full.data.iter().zip(&windowed.data) {
+            assert!((a - b).abs() < 1e-9, "windowed {b} != full {a}");
+        }
+    }
+
+    #[test]
+    fn test_idw_window_offset_origin_and_nodata() {
+        let cloud = PointCloud::from_points(vec![Point3::new(3.0, 4.0, 50.0)]);
+        // Node (0,0) sits at (3,4), exactly on the point
+        let window = GridWindow {
+            origin_x: 3.0,
+            origin_y: 4.0,
+            width: 3,
+            height: 3,
+            cell_size: 1.0,
+        };
+        let grid = idw_window(&cloud, &window, 2.0, 1.5, 1).unwrap();
+        assert!((grid.data[0] - 50.0).abs() < 1e-9);
+        // Node (2,2) at (5,6) is beyond the 1.5 radius
+        assert_eq!(grid.data[2 * 3 + 2], grid.nodata);
+    }
+
+    #[test]
+    fn test_idw_window_empty_cloud_and_bad_params() {
+        let window = GridWindow {
+            origin_x: 0.0,
+            origin_y: 0.0,
+            width: 2,
+            height: 2,
+            cell_size: 1.0,
+        };
+        let grid = idw_window(&PointCloud::new(), &window, 2.0, 1.0, 1).unwrap();
+        assert!(grid.data.iter().all(|&v| v == grid.nodata));
+        let cloud = PointCloud::from_points(vec![Point3::new(0.0, 0.0, 1.0)]);
+        assert!(idw_window(&cloud, &window, 2.0, 0.0, 1).is_none());
+        let bad_cell = GridWindow {
+            cell_size: 0.0,
+            ..window
+        };
+        assert!(idw_window(&cloud, &bad_cell, 2.0, 1.0, 1).is_none());
     }
 
     #[test]

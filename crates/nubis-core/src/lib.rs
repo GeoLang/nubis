@@ -21,7 +21,9 @@ pub use geostatistics::{
     VariogramBin, VariogramModel, empirical_variogram, getis_ord_gi_star, morans_i,
     ordinary_kriging,
 };
-pub use interpolation::{InterpolatedGrid, idw_interpolation, statistical_outlier_removal};
+pub use interpolation::{
+    GridWindow, InterpolatedGrid, idw_interpolation, idw_window, statistical_outlier_removal,
+};
 pub use io::{CloudStats, LasHeader, read_las, write_las};
 pub use normals::estimate_normals;
 pub use octree::Octree;
