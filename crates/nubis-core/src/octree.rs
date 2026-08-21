@@ -14,7 +14,8 @@ struct OctreeNode {
     points: Vec<usize>,
     /// Child octants (if subdivided).
     children: Option<Box<[Option<OctreeNode>; 8]>>,
-    _center: Point3,
+    bounds_min: Point3,
+    bounds_max: Point3,
 }
 
 impl Octree {
@@ -29,24 +30,9 @@ impl Octree {
             };
         }
 
-        let mut min = Point3::new(f64::MAX, f64::MAX, f64::MAX);
-        let mut max = Point3::new(f64::MIN, f64::MIN, f64::MIN);
-        for p in points {
-            min.x = min.x.min(p.x);
-            min.y = min.y.min(p.y);
-            min.z = min.z.min(p.z);
-            max.x = max.x.max(p.x);
-            max.y = max.y.max(p.y);
-            max.z = max.z.max(p.z);
-        }
-
         let indices: Vec<usize> = (0..points.len()).collect();
-        let center = Point3::new(
-            (min.x + max.x) / 2.0,
-            (min.y + max.y) / 2.0,
-            (min.z + max.z) / 2.0,
-        );
-        let root = Self::build_node(points, indices, center, max_points_per_leaf, 0);
+        let (min, max) = node_bounds(points, &indices);
+        let root = Self::build_node(points, indices, min, max, max_points_per_leaf, 0);
 
         Self {
             root: Some(root),
@@ -58,7 +44,8 @@ impl Octree {
     fn build_node(
         points: &[Point3],
         indices: Vec<usize>,
-        center: Point3,
+        bounds_min: Point3,
+        bounds_max: Point3,
         max_per_leaf: usize,
         depth: usize,
     ) -> OctreeNode {
@@ -66,9 +53,16 @@ impl Octree {
             return OctreeNode {
                 points: indices,
                 children: None,
-                _center: center,
+                bounds_min,
+                bounds_max,
             };
         }
+
+        let center = Point3::new(
+            (bounds_min.x + bounds_max.x) / 2.0,
+            (bounds_min.y + bounds_max.y) / 2.0,
+            (bounds_min.z + bounds_max.z) / 2.0,
+        );
 
         let mut buckets: [Vec<usize>; 8] = Default::default();
         for &idx in &indices {
@@ -84,26 +78,22 @@ impl Octree {
             return OctreeNode {
                 points: indices,
                 children: None,
-                _center: center,
+                bounds_min,
+                bounds_max,
             };
         }
-
-        let half_x = (center.x - points[indices[0]].x).abs() / 2.0;
-        let half_y = (center.y - points[indices[0]].y).abs() / 2.0;
-        let half_z = (center.z - points[indices[0]].z).abs() / 2.0;
 
         let children: [Option<OctreeNode>; 8] = std::array::from_fn(|i| {
             if buckets[i].is_empty() {
                 None
             } else {
-                let dx = if i & 1 != 0 { half_x } else { -half_x };
-                let dy = if i & 2 != 0 { half_y } else { -half_y };
-                let dz = if i & 4 != 0 { half_z } else { -half_z };
-                let child_center = Point3::new(center.x + dx, center.y + dy, center.z + dz);
+                let bucket = std::mem::take(&mut buckets[i]);
+                let (child_min, child_max) = node_bounds(points, &bucket);
                 Some(Self::build_node(
                     points,
-                    std::mem::take(&mut buckets[i]),
-                    child_center,
+                    bucket,
+                    child_min,
+                    child_max,
                     max_per_leaf,
                     depth + 1,
                 ))
@@ -113,7 +103,8 @@ impl Octree {
         OctreeNode {
             points: Vec::new(),
             children: Some(Box::new(children)),
-            _center: center,
+            bounds_min,
+            bounds_max,
         }
     }
 
@@ -133,7 +124,10 @@ impl Octree {
         radius_sq: f64,
         result: &mut Vec<usize>,
     ) {
-        // Check leaf points
+        if !sphere_overlaps_aabb(query, radius_sq, &node.bounds_min, &node.bounds_max) {
+            return;
+        }
+
         for &idx in &node.points {
             let p = &points[idx];
             let dist_sq =
@@ -143,7 +137,6 @@ impl Octree {
             }
         }
 
-        // Recurse into children
         if let Some(ref children) = node.children {
             for child in children.iter().flatten() {
                 Self::query_node(child, points, query, radius_sq, result);
@@ -158,6 +151,28 @@ impl Octree {
     pub fn bounds(&self) -> (Point3, Point3) {
         (self.bounds_min, self.bounds_max)
     }
+}
+
+fn node_bounds(points: &[Point3], indices: &[usize]) -> (Point3, Point3) {
+    let mut min = Point3::new(f64::MAX, f64::MAX, f64::MAX);
+    let mut max = Point3::new(f64::MIN, f64::MIN, f64::MIN);
+    for &idx in indices {
+        let p = &points[idx];
+        min.x = min.x.min(p.x);
+        min.y = min.y.min(p.y);
+        min.z = min.z.min(p.z);
+        max.x = max.x.max(p.x);
+        max.y = max.y.max(p.y);
+        max.z = max.z.max(p.z);
+    }
+    (min, max)
+}
+
+fn sphere_overlaps_aabb(query: &Point3, radius_sq: f64, min: &Point3, max: &Point3) -> bool {
+    let dx = query.x.clamp(min.x, max.x) - query.x;
+    let dy = query.y.clamp(min.y, max.y) - query.y;
+    let dz = query.z.clamp(min.z, max.z) - query.z;
+    dx * dx + dy * dy + dz * dz <= radius_sq
 }
 
 #[cfg(test)]
@@ -182,5 +197,32 @@ mod tests {
     fn test_octree_empty() {
         let tree = Octree::build(&[], 10);
         assert!(tree.is_empty());
+    }
+
+    #[test]
+    fn test_octree_query_prunes_far_cluster() {
+        let mut points = vec![
+            Point3::new(0.0, 0.0, 0.0),
+            Point3::new(0.2, 0.0, 0.0),
+            Point3::new(0.0, 0.2, 0.0),
+            Point3::new(0.0, 0.0, 0.2),
+            Point3::new(0.1, 0.1, 0.1),
+        ];
+        let near_count = points.len();
+        points.extend([
+            Point3::new(100.0, 100.0, 100.0),
+            Point3::new(100.2, 100.0, 100.0),
+            Point3::new(100.0, 100.2, 100.0),
+            Point3::new(100.0, 100.0, 100.2),
+            Point3::new(100.1, 100.1, 100.1),
+        ]);
+        let tree = Octree::build(&points, 1);
+
+        let near = tree.query_radius(&points, &Point3::new(0.0, 0.0, 0.0), 2.0);
+        assert_eq!(near.len(), near_count);
+        assert!(near.iter().all(|&i| i < near_count));
+
+        let both = tree.query_radius(&points, &Point3::new(0.0, 0.0, 0.0), 200.0);
+        assert_eq!(both.len(), points.len());
     }
 }
