@@ -3,7 +3,7 @@ use crate::{Classification, Point3, PointCloud};
 /// Simple ground filter: classify points whose Z is within `threshold`
 /// of the lowest point in their local neighbourhood as ground.
 ///
-/// This is a simplified progressive morphological filter approach.
+/// Single-pass minimum-Z per cell, then a height threshold. Not PMF.
 pub fn ground_filter_simple(cloud: &mut PointCloud, cell_size: f64, threshold: f64) {
     if cloud.is_empty() {
         return;

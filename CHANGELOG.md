@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- 2026-08-21: ground filtering is documented as a single-pass minimum-Z
+  threshold, not a progressive morphological filter.
+
 ### Added
 
 - `idw_window` interpolates onto a caller-specified grid window (`GridWindow`) instead of
