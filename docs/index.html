@@ -79,9 +79,9 @@ footer{border-top:1px solid var(--border);padding:32px 0;text-align:center;color
 <div class="card">
 <h3>🏗️ Ground Filtering</h3>
 <ul>
-<li>Single-pass minimum-Z per grid cell</li>
-<li>Configurable cell size and height threshold</li>
-<li>Not a progressive morphological filter (no opening, no window progression, no slope, no iteration)</li>
+<li>Single-pass minimum-Z per grid cell, with a configurable cell size and height threshold</li>
+<li>That pass alone is not a progressive morphological filter (no opening, no window progression, no slope, no iteration)</li>
+<li>Progressive morphological filter (Zhang et al. 2003) with growing windows and a slope-driven threshold</li>
 </ul>
 </div>
 <div class="card">

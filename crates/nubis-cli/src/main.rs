@@ -1,8 +1,8 @@
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use nubis_core::{
-    Classification, CloudStats, LasHeader, Point3, PointCloud, VariogramModel, empirical_variogram,
-    ground_filter_simple, idw_interpolation, ordinary_kriging, read_las,
-    statistical_outlier_removal, thin_random, thin_voxel, write_las,
+    Classification, CloudStats, LasHeader, PmfParams, Point3, PointCloud, VariogramModel,
+    empirical_variogram, ground_filter_pmf, ground_filter_simple, idw_interpolation,
+    ordinary_kriging, read_las, statistical_outlier_removal, thin_random, thin_voxel, write_las,
 };
 use std::collections::BTreeMap;
 use std::fs::File;
@@ -42,6 +42,30 @@ enum Commands {
         /// Height above local minimum still counted as ground
         #[arg(long, default_value_t = 0.5)]
         threshold: f64,
+    },
+    /// Classify ground points with a progressive morphological filter and write a new LAS file
+    Pmf {
+        /// Input LAS file
+        #[arg(long)]
+        input: PathBuf,
+        /// Output LAS file
+        #[arg(long)]
+        output: PathBuf,
+        /// Grid cell size
+        #[arg(long, default_value_t = PmfParams::default().cell_size)]
+        cell_size: f64,
+        /// Largest filter window, in coordinate units
+        #[arg(long, default_value_t = PmfParams::default().max_window_size)]
+        max_window_size: f64,
+        /// Steepest terrain counted as ground, rise over run
+        #[arg(long, default_value_t = PmfParams::default().slope)]
+        slope: f64,
+        /// Height above the surface still counted as ground for the first window
+        #[arg(long, default_value_t = PmfParams::default().initial_distance)]
+        initial_distance: f64,
+        /// Cap on that height once the windows grow
+        #[arg(long, default_value_t = PmfParams::default().max_distance)]
+        max_distance: f64,
     },
     /// Decimate a LAS file and write the result
     Thin {
@@ -225,6 +249,25 @@ fn run() -> Result<()> {
             cell_size,
             threshold,
         } => ground_classify(&input, &output, cell_size, threshold),
+        Commands::Pmf {
+            input,
+            output,
+            cell_size,
+            max_window_size,
+            slope,
+            initial_distance,
+            max_distance,
+        } => pmf(
+            &input,
+            &output,
+            &PmfParams {
+                cell_size,
+                max_window_size,
+                slope,
+                initial_distance,
+                max_distance,
+            },
+        ),
         Commands::Thin {
             input,
             output,
@@ -292,13 +335,22 @@ fn info(input: &Path) -> Result<()> {
 fn ground_classify(input: &Path, output: &Path, cell_size: f64, threshold: f64) -> Result<()> {
     let mut cloud = load_cloud(input)?;
     ground_filter_simple(&mut cloud, cell_size, threshold);
+    write_ground(&cloud, output)
+}
 
+fn pmf(input: &Path, output: &Path, params: &PmfParams) -> Result<()> {
+    let mut cloud = load_cloud(input)?;
+    ground_filter_pmf(&mut cloud, params);
+    write_ground(&cloud, output)
+}
+
+fn write_ground(cloud: &PointCloud, output: &Path) -> Result<()> {
     let ground = cloud
         .points()
         .iter()
         .filter(|p| p.classification == Classification::Ground)
         .count();
-    save_cloud(&cloud, output)?;
+    save_cloud(cloud, output)?;
 
     println!(
         "Ground: {ground}/{} points ({:.1}%)",

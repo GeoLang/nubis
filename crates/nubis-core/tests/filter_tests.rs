@@ -1,8 +1,8 @@
 //! Ground filtering, thinning, and outlier removal on inputs with a known answer.
 
 use nubis_core::{
-    Classification, Point3, PointCloud, ground_filter_simple, statistical_outlier_removal,
-    thin_random, thin_voxel,
+    Classification, PmfParams, Point3, PointCloud, ground_filter_pmf, ground_filter_simple,
+    statistical_outlier_removal, thin_random, thin_voxel,
 };
 use std::collections::HashSet;
 
@@ -315,4 +315,94 @@ fn outlier_removal_keeps_classification_and_intensity() {
     }
     let intensities: Vec<u16> = cleaned.points().iter().map(|p| p.intensity).collect();
     assert_eq!(intensities, (0..30).collect::<Vec<u16>>());
+}
+
+// ── progressive morphological filter ──────────────────────────────────────
+
+/// Flat ground at z=0 on a 60x60 grid, a 10x10 building at z=6, one tree point at z=8.
+/// The building replaces the ground under it, the way a roof hides it from the scanner.
+fn ground_with_building_and_tree() -> PointCloud {
+    let building = 20..30;
+    let mut points = Vec::new();
+    for y in 0..60 {
+        for x in 0..60 {
+            let z = if building.contains(&x) && building.contains(&y) {
+                6.0
+            } else {
+                0.0
+            };
+            points.push(Point3::new(x as f64, y as f64, z));
+        }
+    }
+    points.push(Point3::new(45.0, 45.0, 8.0));
+    PointCloud::from_points(points)
+}
+
+#[test]
+fn pmf_separates_the_building_and_the_tree_from_the_flat_ground() {
+    let mut cloud = ground_with_building_and_tree();
+    ground_filter_pmf(&mut cloud, &PmfParams::default());
+
+    for p in cloud.points() {
+        let is_ground = p.classification == Classification::Ground;
+        assert_eq!(
+            is_ground,
+            p.z == 0.0,
+            "point at ({}, {}, {}) came out {:?}",
+            p.x,
+            p.y,
+            p.z,
+            p.classification
+        );
+    }
+    let ground = cloud
+        .points()
+        .iter()
+        .filter(|p| p.classification == Classification::Ground)
+        .count();
+    assert_eq!(ground, 3500, "every flat point, no roof and no tree");
+
+    // the defect pmf fixes: a 2 unit cell that holds nothing but roof returns has its own
+    // minimum, so the roof reads as ground
+    let mut same_scene = ground_with_building_and_tree();
+    ground_filter_simple(&mut same_scene, 2.0, 0.5);
+    let roof_as_ground = same_scene
+        .points()
+        .iter()
+        .filter(|p| p.z == 6.0 && p.classification == Classification::Ground)
+        .count();
+    assert!(
+        roof_as_ground > 0,
+        "the simple filter was expected to call part of the roof ground"
+    );
+}
+
+#[test]
+fn pmf_keeps_a_slope_gentler_than_the_slope_parameter() {
+    let mut points = Vec::new();
+    for y in 0..60 {
+        for x in 0..60 {
+            points.push(Point3::new(x as f64, y as f64, 0.1 * x as f64));
+        }
+    }
+    let mut cloud = PointCloud::from_points(points);
+    ground_filter_pmf(&mut cloud, &PmfParams::default());
+
+    let ground = cloud
+        .points()
+        .iter()
+        .filter(|p| p.classification == Classification::Ground)
+        .count();
+    assert_eq!(
+        ground,
+        cloud.len(),
+        "terrain rising 0.1 per unit is under the default slope of 0.15"
+    );
+}
+
+#[test]
+fn pmf_on_an_empty_cloud_does_nothing() {
+    let mut cloud = PointCloud::new();
+    ground_filter_pmf(&mut cloud, &PmfParams::default());
+    assert!(cloud.is_empty());
 }

@@ -11,6 +11,9 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- 2026-08-21: `ground_filter_pmf` and `PmfParams` add the progressive morphological
+  filter (Zhang et al. 2003), with a `pmf` CLI subcommand.
+
 - `idw_window` interpolates onto a caller-specified grid window (`GridWindow`) instead of
   the cloud bounds, with points binned at the search radius so tiled gridding stays fast.
 

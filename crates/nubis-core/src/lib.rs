@@ -16,7 +16,7 @@ mod octree;
 pub use classification::Classification;
 pub use cloud::{Point3, PointCloud};
 pub use error::Error;
-pub use filter::{ground_filter_simple, thin_random, thin_voxel};
+pub use filter::{PmfParams, ground_filter_pmf, ground_filter_simple, thin_random, thin_voxel};
 pub use geostatistics::{
     VariogramBin, VariogramModel, empirical_variogram, getis_ord_gi_star, morans_i,
     ordinary_kriging,
