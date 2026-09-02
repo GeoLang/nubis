@@ -14,7 +14,7 @@ Point cloud processing engine for the GeoLang GIS stack.
 - **Classification** — ASPRS LAS standard codes (ground, vegetation, building, water, etc.)
 - **Ground filtering** — `ground_filter_simple` takes a single-pass minimum-Z per grid cell plus a height threshold, with no opening, no window progression, no slope term and no iteration. `ground_filter_pmf` is the progressive morphological filter (Zhang et al. 2003), opening that surface with windows that grow until buildings and vegetation drop out
 - **Thinning** — Random sampling and voxel-based decimation
-- **IDW interpolation** — Inverse Distance Weighting gridding from scattered points
+- **IDW interpolation** — Inverse Distance Weighting gridding from scattered points. `idw_interpolation` grids the cloud bounds, `idw_window` grids a caller-supplied `GridWindow` and bins points at the search radius so tiled gridding stays fast
 - **Normal estimation** — Per-point surface normals from local neighborhoods
 - **Statistical Outlier Removal (SOR)** — Remove noise points based on mean distance to neighbors
 - **Spatial indexing** — Octree with radius queries, configurable leaf size, depth-limited subdivision
@@ -60,8 +60,12 @@ Esri ASCII grid (`.asc`) with values on the grid nodes (`xllcenter`/`yllcenter`)
 # summary: header, bounds, z statistics, classification counts
 nubis info --input scan.las
 
-# ground classification
+# ground classification, single-pass minimum-Z per cell
 nubis ground-classify --input scan.las --output ground.las --cell-size 2.0 --threshold 0.5
+
+# ground classification, progressive morphological filter
+nubis pmf --input scan.las --output ground.las --cell-size 1.0 --max-window-size 33.0 \
+  --slope 0.15 --initial-distance 0.5 --max-distance 3.0
 
 # decimation, voxel (default) or random
 nubis thin --input scan.las --output thin.las --voxel-size 1.0
@@ -78,8 +82,8 @@ nubis outlier-removal --input scan.las --output clean.las --neighbours 20 --std-
 nubis interpolate-to-grid --input ground.las --output dem.asc --cell-size 1.0 --search-radius 10.0
 nubis interpolate-to-grid --input ground.las --output dem.asc --method kriging --search-radius 10.0
 
-# empirical variogram and fitted spherical model
-nubis variogram --input scan.las --bins 10
+# empirical variogram and fitted spherical model, --max-lag defaults to half the cloud diagonal
+nubis variogram --input scan.las --bins 10 --max-lag 25.0
 
 # synthetic terrain to try the commands on
 nubis demo --output demo.las --count 1000
@@ -88,7 +92,7 @@ nubis demo --output demo.las --count 1000
 Kriging needs `--search-radius` above 0, it also sets the maximum lag used to fit the variogram.
 Every command prints a short summary and exits non-zero with a message on stderr on failure.
 
-A bare-earth DEM is three steps, classify then select then grid:
+A bare-earth DEM is four steps, clean then classify then select then grid:
 
 ```sh
 nubis outlier-removal --input scan.las --output clean.las
@@ -99,8 +103,9 @@ nubis interpolate-to-grid --input bare.las --output dem.asc --cell-size 2.0 --se
 
 Limits worth knowing:
 
-- `--keep` only names the classes `Classification` has variants for. Other codes round trip
-  through read and write untouched, but cannot be selected by name.
+- `--keep` takes a name only for the 13 classes `Classification` has variants for. Any other
+  code is selected by its bare number, 0 to 31, and round trips through read and write with
+  its value intact.
 - Writing uses a 1 mm scale, so a cloud spanning more than about 4295 km on any axis is
   rejected rather than written with saturated coordinates.
 

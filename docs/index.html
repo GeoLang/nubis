@@ -41,7 +41,7 @@ footer{border-top:1px solid var(--border);padding:32px 0;text-align:center;color
 <header>
 <div class="container">
 <h1>☁️ Nubis</h1>
-<p class="tagline">Point cloud processing engine — LiDAR classification, ground filtering, thinning, and spatial indexing.</p>
+<p class="tagline">Point cloud processing engine: LAS reading and writing, ground filtering, thinning, spatial indexing, gridding, and geostatistics, with a <code>nubis</code> command line tool over the same library.</p>
 <div class="badges">
 <img src="https://img.shields.io/badge/license-AGPL--3.0-blue" alt="License">
 <img src="https://img.shields.io/badge/Rust-2024-orange" alt="Rust">
@@ -55,7 +55,7 @@ footer{border-top:1px solid var(--border);padding:32px 0;text-align:center;color
 </div>
 <div class="stats">
 <div class="stat"><div class="num">13</div><div class="label">ASPRS classes</div></div>
-<div class="stat"><div class="num">3</div><div class="label">Filter methods</div></div>
+<div class="stat"><div class="num">4</div><div class="label">Filter methods</div></div>
 <div class="stat"><div class="num">8</div><div class="label">Octree octants</div></div>
 <div class="stat"><div class="num">0</div><div class="label">C dependencies</div></div>
 </div>
@@ -102,6 +102,44 @@ footer{border-top:1px solid var(--border);padding:32px 0;text-align:center;color
 <li>Configurable leaf size</li>
 <li>Depth-limited subdivision</li>
 <li>3D bounding box tracking</li>
+</ul>
+</div>
+<div class="card">
+<h3>💾 LAS Files</h3>
+<ul>
+<li>Reads point record formats 0 to 3</li>
+<li>Writes LAS 1.2 format 0 at a 1 mm scale</li>
+<li>Header parsing over any reader</li>
+<li>Class codes the enum does not name keep their value</li>
+<li>Per-point surface normals and outlier removal</li>
+</ul>
+</div>
+<div class="card">
+<h3>🗺️ Gridding</h3>
+<ul>
+<li>Inverse distance weighting over the cloud bounds</li>
+<li>Inverse distance weighting over a caller-chosen window, for tiles</li>
+<li>Ordinary kriging with a fitted spherical variogram</li>
+<li>Esri ASCII grid output with values on the nodes</li>
+</ul>
+</div>
+<div class="card">
+<h3>📈 Geostatistics</h3>
+<ul>
+<li>Empirical variograms</li>
+<li>Spherical, exponential, and gaussian models</li>
+<li>Moran's I spatial autocorrelation</li>
+<li>Getis-Ord Gi* hot-spot scores</li>
+</ul>
+</div>
+<div class="card">
+<h3>⌨️ Command Line</h3>
+<ul>
+<li><code>info</code> prints header, bounds, and class counts</li>
+<li><code>ground-classify</code> and <code>pmf</code> label ground points</li>
+<li><code>thin</code>, <code>filter-class</code>, <code>outlier-removal</code> reduce a cloud</li>
+<li><code>interpolate-to-grid</code> and <code>variogram</code> produce the surface</li>
+<li><code>demo</code> writes a synthetic terrain to try on</li>
 </ul>
 </div>
 </div>
