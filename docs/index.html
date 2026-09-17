@@ -45,7 +45,7 @@ footer{border-top:1px solid var(--border);padding:32px 0;text-align:center;color
 <div class="badges">
 <img src="https://img.shields.io/badge/license-AGPL--3.0-blue" alt="License">
 <img src="https://img.shields.io/badge/Rust-2024-orange" alt="Rust">
-<img src="https://img.shields.io/badge/tests-passing-brightgreen" alt="Tests">
+<img src="https://github.com/GeoLang/nubis/actions/workflows/ci.yml/badge.svg" alt="CI">
 </div>
 <div class="hero">
 <a href="https://github.com/GeoLang/nubis">GitHub</a>
@@ -87,11 +87,11 @@ footer{border-top:1px solid var(--border);padding:32px 0;text-align:center;color
 <div class="card">
 <h3>✂️ Thinning</h3>
 <ul>
-<li>Random sampling (fraction-based)</li>
-<li>Voxel-based decimation</li>
-<li>Deterministic results</li>
+<li>The <code>random</code> method keeps a fraction at an even index stride</li>
+<li>It draws no random numbers, so one cloud always thins to the same points</li>
+<li>Voxel decimation keeps the first point in each voxel</li>
 <li>Configurable voxel size</li>
-<li>Preserves classification</li>
+<li>A kept point carries its classification through</li>
 </ul>
 </div>
 <div class="card">

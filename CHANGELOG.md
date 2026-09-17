@@ -6,6 +6,12 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
+- 2026-09-16: docs match the code. `thin_random` is described as the even index
+  stride it is, in both files: it draws no random numbers, and the docs page no
+  longer calls it random sampling. The README's LAS feature line separates
+  reading point record formats 0 to 3 from writing, which only ever produces
+  LAS 1.2 format 0. The docs page carries the CI badge instead of a hardcoded
+  green one.
 - 2026-08-21: ground filtering is documented as a single-pass minimum-Z
   threshold, not a progressive morphological filter.
 

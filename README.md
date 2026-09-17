@@ -9,11 +9,11 @@ Point cloud processing engine for the GeoLang GIS stack.
 
 ## Features
 
-- **LAS I/O** — Read and write LAS point formats 0-3 from any reader or writer, with header parsing
+- **LAS I/O** — Read point record formats 0 to 3 from any reader and write LAS 1.2 format 0 to any writer, with header parsing
 - **Point cloud types** — `Point3`, `PointCloud` with classification, intensity, and statistics
 - **Classification** — ASPRS LAS standard codes (ground, vegetation, building, water, etc.)
 - **Ground filtering** — `ground_filter_simple` takes a single-pass minimum-Z per grid cell plus a height threshold, with no opening, no window progression, no slope term and no iteration. `ground_filter_pmf` is the progressive morphological filter (Zhang et al. 2003), opening that surface with windows that grow until buildings and vegetation drop out
-- **Thinning** — Random sampling and voxel-based decimation
+- **Thinning** — `thin_voxel` keeps the first point of each voxel. `thin_random` keeps a fraction of the points at an even index stride, so despite the name it draws no random numbers and the same cloud always thins to the same points
 - **IDW interpolation** — Inverse Distance Weighting gridding from scattered points. `idw_interpolation` grids the cloud bounds, `idw_window` grids a caller-supplied `GridWindow` and bins points at the search radius so tiled gridding stays fast
 - **Normal estimation** — Per-point surface normals from local neighborhoods
 - **Statistical Outlier Removal (SOR)** — Remove noise points based on mean distance to neighbors
