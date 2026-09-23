@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Nubis — Point Cloud Processing Engine</title>
+<title>Nubis: Point Cloud Processing Engine</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 :root{--bg:#0d1117;--card:#161b22;--border:#30363d;--text:#c9d1d9;--heading:#f0f6fc;--accent:#58a6ff;--accent2:#3fb950;--muted:#8b949e}
@@ -40,7 +40,7 @@ footer{border-top:1px solid var(--border);padding:32px 0;text-align:center;color
 <body>
 <header>
 <div class="container">
-<h1>☁️ Nubis</h1>
+<h1>Nubis</h1>
 <p class="tagline">Point cloud processing engine: LAS reading and writing, ground filtering, thinning, spatial indexing, gridding, and geostatistics, with a <code>nubis</code> command line tool over the same library.</p>
 <div class="badges">
 <img src="https://img.shields.io/badge/license-AGPL--3.0-blue" alt="License">
@@ -55,7 +55,7 @@ footer{border-top:1px solid var(--border);padding:32px 0;text-align:center;color
 </div>
 <div class="stats">
 <div class="stat"><div class="num">13</div><div class="label">ASPRS classes</div></div>
-<div class="stat"><div class="num">4</div><div class="label">Filter methods</div></div>
+<div class="stat"><div class="num">2</div><div class="label">Ground filters</div></div>
 <div class="stat"><div class="num">8</div><div class="label">Octree octants</div></div>
 <div class="stat"><div class="num">0</div><div class="label">C dependencies</div></div>
 </div>
@@ -67,17 +67,17 @@ footer{border-top:1px solid var(--border);padding:32px 0;text-align:center;color
 <h2 id="features">Features</h2>
 <div class="grid">
 <div class="card">
-<h3>📡 Point Cloud Types</h3>
+<h3>Point Cloud Types</h3>
 <ul>
-<li>3D points (x, y, z, intensity)</li>
+<li>3D points with intensity and classification</li>
 <li>ASPRS classification codes</li>
 <li>Bounding box computation</li>
 <li>Centroid calculation</li>
-<li>Dynamic point collection</li>
+<li>Per-point surface normals from the k nearest neighbours</li>
 </ul>
 </div>
 <div class="card">
-<h3>🏗️ Ground Filtering</h3>
+<h3>Ground Filtering</h3>
 <ul>
 <li>Single-pass minimum-Z per grid cell, with a configurable cell size and height threshold</li>
 <li>That pass alone is not a progressive morphological filter (no opening, no window progression, no slope, no iteration)</li>
@@ -85,37 +85,37 @@ footer{border-top:1px solid var(--border);padding:32px 0;text-align:center;color
 </ul>
 </div>
 <div class="card">
-<h3>✂️ Thinning</h3>
+<h3>Thinning and Cleaning</h3>
 <ul>
-<li>The <code>random</code> method keeps a fraction at an even index stride</li>
+<li>The <code>random</code> method keeps a fraction of the points at evenly spaced indices</li>
 <li>It draws no random numbers, so one cloud always thins to the same points</li>
 <li>Voxel decimation keeps the first point in each voxel</li>
 <li>Configurable voxel size</li>
-<li>A kept point carries its classification through</li>
+<li>Statistical outlier removal by mean distance to the k nearest neighbours</li>
 </ul>
 </div>
 <div class="card">
-<h3>🌳 Spatial Indexing</h3>
+<h3>Spatial Indexing</h3>
 <ul>
 <li>Octree construction</li>
 <li>Radius queries</li>
 <li>Configurable leaf size</li>
-<li>Depth-limited subdivision</li>
+<li>Subdivision capped at depth 20</li>
 <li>3D bounding box tracking</li>
 </ul>
 </div>
 <div class="card">
-<h3>💾 LAS Files</h3>
+<h3>LAS Files</h3>
 <ul>
-<li>Reads point record formats 0 to 3</li>
+<li>Reads point record formats 0 to 3, keeping XYZ, intensity and class</li>
 <li>Writes LAS 1.2 format 0 at a 1 mm scale</li>
 <li>Header parsing over any reader</li>
 <li>Class codes the enum does not name keep their value</li>
-<li>Per-point surface normals and outlier removal</li>
+<li>GPS time and RGB are not read</li>
 </ul>
 </div>
 <div class="card">
-<h3>🗺️ Gridding</h3>
+<h3>Gridding</h3>
 <ul>
 <li>Inverse distance weighting over the cloud bounds</li>
 <li>Inverse distance weighting over a caller-chosen window, for tiles</li>
@@ -124,21 +124,21 @@ footer{border-top:1px solid var(--border);padding:32px 0;text-align:center;color
 </ul>
 </div>
 <div class="card">
-<h3>📈 Geostatistics</h3>
+<h3>Geostatistics</h3>
 <ul>
 <li>Empirical variograms</li>
-<li>Spherical, exponential, and gaussian models</li>
+<li>Spherical, exponential and gaussian models, fitting for spherical only</li>
 <li>Moran's I spatial autocorrelation</li>
 <li>Getis-Ord Gi* hot-spot scores</li>
 </ul>
 </div>
 <div class="card">
-<h3>⌨️ Command Line</h3>
+<h3>Command Line</h3>
 <ul>
 <li><code>info</code> prints header, bounds, and class counts</li>
 <li><code>ground-classify</code> and <code>pmf</code> label ground points</li>
 <li><code>thin</code>, <code>filter-class</code>, <code>outlier-removal</code> reduce a cloud</li>
-<li><code>interpolate-to-grid</code> and <code>variogram</code> produce the surface</li>
+<li><code>interpolate-to-grid</code> writes an Esri ASCII grid, <code>variogram</code> prints the fitted model</li>
 <li><code>demo</code> writes a synthetic terrain to try on</li>
 </ul>
 </div>
@@ -149,13 +149,19 @@ footer{border-top:1px solid var(--border);padding:32px 0;text-align:center;color
 <section>
 <div class="container">
 <h2>Quick Start</h2>
-<pre><code>use nubis_core::{Point3, PointCloud, ground_filter_simple, Octree};
+<pre><code>use nubis_core::{Octree, ground_filter_simple, read_las};
 
-let mut cloud = PointCloud::from_points(points);
+let mut file = std::fs::File::open("scan.las").unwrap();
+let mut cloud = read_las(&amp;mut file).unwrap();
 ground_filter_simple(&amp;mut cloud, 2.0, 0.5);
 
 let tree = Octree::build(cloud.points(), 64);
-let nearby = tree.query_radius(cloud.points(), &amp;query, 5.0);</code></pre>
+let nearby = tree.query_radius(cloud.points(), &amp;cloud.points()[0], 5.0);</code></pre>
+<p>A bare-earth DEM from the command line, after <code>cargo install --path crates/nubis-cli</code>:</p>
+<pre><code>nubis info --input scan.las
+nubis ground-classify --input scan.las --output classified.las --cell-size 2.0 --threshold 0.5
+nubis filter-class --input classified.las --output bare.las --keep ground
+nubis interpolate-to-grid --input bare.las --output dem.asc --cell-size 2.0 --search-radius 4.0</code></pre>
 </div>
 </section>
 

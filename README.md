@@ -9,52 +9,58 @@ Point cloud processing engine for the GeoLang GIS stack.
 
 ## Features
 
-- **LAS I/O** — Read point record formats 0 to 3 from any reader and write LAS 1.2 format 0 to any writer, with header parsing
-- **Point cloud types** — `Point3`, `PointCloud` with classification, intensity, and statistics
-- **Classification** — ASPRS LAS standard codes (ground, vegetation, building, water, etc.)
-- **Ground filtering** — `ground_filter_simple` takes a single-pass minimum-Z per grid cell plus a height threshold, with no opening, no window progression, no slope term and no iteration. `ground_filter_pmf` is the progressive morphological filter (Zhang et al. 2003), opening that surface with windows that grow until buildings and vegetation drop out
-- **Thinning** — `thin_voxel` keeps the first point of each voxel. `thin_random` keeps a fraction of the points at an even index stride, so despite the name it draws no random numbers and the same cloud always thins to the same points
-- **IDW interpolation** — Inverse Distance Weighting gridding from scattered points. `idw_interpolation` grids the cloud bounds, `idw_window` grids a caller-supplied `GridWindow` and bins points at the search radius so tiled gridding stays fast
-- **Normal estimation** — Per-point surface normals from local neighborhoods
-- **Statistical Outlier Removal (SOR)** — Remove noise points based on mean distance to neighbors
-- **Spatial indexing** — Octree with radius queries, configurable leaf size, depth-limited subdivision
-- **Geostatistics** — Empirical variograms (spherical, exponential, gaussian models), Ordinary Kriging interpolation, Moran's I spatial autocorrelation, Getis-Ord Gi* hot-spot analysis
+- **LAS I/O**: `read_las` reads point record formats 0 to 3 from any seekable reader, keeping XYZ, intensity and classification. GPS time and RGB are skipped. `write_las` writes LAS 1.2 format 0 to any writer
+- **Point cloud types**: `Point3`, `PointCloud` with classification, intensity, and statistics
+- **Classification**: ASPRS codes as `Classification`, 13 named (ground, vegetation, building, water and others) and the rest carried as `Other(code)`
+- **Ground filtering**: `ground_filter_simple` takes a single-pass minimum-Z per grid cell plus a height threshold, with no opening, no window progression, no slope term and no iteration. `ground_filter_pmf` is the progressive morphological filter (Zhang et al. 2003), opening that surface with windows that grow until buildings and vegetation drop out
+- **Thinning**: `thin_voxel` keeps the first point of each voxel. `thin_random` keeps a fraction of the points at evenly spaced indices. It draws no random numbers, so the same cloud always thins to the same points
+- **IDW interpolation**: inverse distance weighting onto a grid. `idw_interpolation` grids the cloud bounds. `idw_window` grids a caller-supplied `GridWindow` for tiled output and bins points at the search radius, so each node only scans nearby points
+- **Normal estimation**: `estimate_normals` fits a plane to each point's k nearest neighbours, found by brute-force search
+- **Statistical outlier removal**: `statistical_outlier_removal` drops points whose mean distance to their k nearest neighbours is more than a multiple of the standard deviation above the average, also by brute-force search
+- **Spatial indexing**: `Octree` with radius queries, a configurable leaf size and subdivision capped at depth 20
+- **Geostatistics**: empirical variograms, spherical, exponential and gaussian models (only the spherical one has a fitter, `VariogramModel::fit_spherical`), ordinary kriging onto a grid, Moran's I and Getis-Ord Gi* scores
 
 ## Usage
 
 ```rust
 use nubis_core::{
-    Point3, PointCloud, ground_filter_simple, thin_voxel, Octree,
-    idw_interpolation, estimate_normals, statistical_outlier_removal,
-    read_las, write_las,
+    Octree, estimate_normals, ground_filter_simple, idw_interpolation, read_las,
+    statistical_outlier_removal, write_las,
 };
 
 // Read a LAS file
 let mut file = std::fs::File::open("scan.las").unwrap();
-let cloud = read_las(&mut file).unwrap();
+let mut cloud = read_las(&mut file).unwrap();
 
-// Ground filtering
-let mut cloud = PointCloud::from_points(points);
+// Ground filtering: cell size, height threshold
 ground_filter_simple(&mut cloud, 2.0, 0.5);
 
 // IDW interpolation to grid: cell size, power, search radius, min points
 let grid = idw_interpolation(&cloud, 1.0, 2.0, 10.0, 3).unwrap();
 
-// Normal estimation
+// Normals from the 10 nearest neighbours
 let normals = estimate_normals(&cloud, 10);
 
-// Statistical Outlier Removal
+// Outlier removal: 20 neighbours, 2 standard deviations
 let cleaned = statistical_outlier_removal(&cloud, 20, 2.0);
 
-// Spatial indexing
+// Octree with up to 64 points per leaf, indices within 5 units of the first point
 let tree = Octree::build(cloud.points(), 64);
-let nearby = tree.query_radius(cloud.points(), &query, 5.0);
+let nearby = tree.query_radius(cloud.points(), &cloud.points()[0], 5.0);
+
+// Write LAS 1.2
+let mut out = std::fs::File::create("clean.las").unwrap();
+write_las(&cleaned, &mut out).unwrap();
 ```
 
 ## CLI
 
+`cargo install --path crates/nubis-cli` builds the `nubis` binary. Tagged releases
+attach it for Linux and macOS on x86_64 and aarch64.
+
 `nubis` reads LAS point formats 0-3 and writes LAS 1.2 format 0. Gridded output is an
-Esri ASCII grid (`.asc`) with values on the grid nodes (`xllcenter`/`yllcenter`).
+Esri ASCII grid (`.asc`) with values on the grid nodes (`xllcenter`/`yllcenter`) and
+`-9999` as nodata.
 
 ```sh
 # summary: header, bounds, z statistics, classification counts
@@ -89,7 +95,7 @@ nubis variogram --input scan.las --bins 10 --max-lag 25.0
 nubis demo --output demo.las --count 1000
 ```
 
-Kriging needs `--search-radius` above 0, it also sets the maximum lag used to fit the variogram.
+Kriging needs `--search-radius` above 0. It also sets the maximum lag used to fit the variogram.
 Every command prints a short summary and exits non-zero with a message on stderr on failure.
 
 A bare-earth DEM is four steps, clean then classify then select then grid:
