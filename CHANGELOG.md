@@ -6,6 +6,8 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
+- 2026-11-04: CI and the release workflow call the reusable workflows in
+  `GeoLang/.github`. The `nubis-<target>.tar.gz` archives are unchanged.
 - 2026-09-16: docs match the code. `thin_random` is described as the even index
   stride it is, in both files: it draws no random numbers, and the docs page no
   longer calls it random sampling. The README's LAS feature line separates
